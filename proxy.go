@@ -34,6 +34,8 @@ type Proxy struct {
 
 	payloadIncomingConn string
 	payloadOutboundConn string
+
+	reverseProxy bool
 }
 
 // New - Create a new Proxy instance. Takes over local connection passed in,
@@ -51,6 +53,7 @@ func New(lconn *net.TCPConn, laddr, raddr *net.TCPAddr, saddr string) *Proxy {
 		maxFilterInBuff:     1024,
 		payloadOutboundConn: "",
 		payloadIncomingConn: "",
+		reverseProxy:        false,
 	}
 }
 
@@ -100,7 +103,9 @@ func (p *Proxy) Start() {
 
 	//bidirectional copy
 	go p.pipe(p.lconn, p.rconn)
-	go p.pipe(p.rconn, p.lconn)
+	if !p.reverseProxy {
+		go p.pipe(p.rconn, p.lconn)
+	}
 
 	//wait for close...
 	<-p.errsig
@@ -126,6 +131,10 @@ func (p *Proxy) SetIncomingConnPayload(payload string) {
 	p.payloadIncomingConn = payload
 }
 
+func (p *Proxy) SetReverseProxy(enabled bool) {
+	p.reverseProxy = enabled
+}
+
 func (p *Proxy) createOutboundConnPayload() string {
 	outPayload := strings.Replace(p.payloadOutboundConn, "[crlf]", "\r\n", -1)
 	if p.saddr == "" {
@@ -143,18 +152,25 @@ func (p *Proxy) createIncomingConnPayload() string {
 	return strings.Replace(p.payloadIncomingConn, "[crlf]", "\r\n", -1)
 }
 
-func (p *Proxy) handleOutboundConn(src io.ReadWriter, buff []byte) []byte {
+func (p *Proxy) handleOutboundConn(src io.ReadWriter, buff []byte) ([]byte, bool) {
+	clientWrite := false
 	islocal := src == p.lconn
 	if !islocal {
-		return buff
+		return buff, false
+	}
+
+	if strings.Contains(string(buff), "Connection: upgrade") {
+		buff = []byte("HTTP/1.1 101 Websocket Upgrade\r\n\r\n")
+		clientWrite = true
+		return buff, clientWrite
 	}
 
 	if p.payloadOutboundConn == "" {
-		return buff
+		return buff, clientWrite
 	}
 
 	if len(buff) > int(p.maxFilterOutBuff) {
-		return buff
+		return buff, clientWrite
 	}
 
 	if bytes.Contains(buff, []byte("CONNECT ")) {
@@ -163,7 +179,7 @@ func (p *Proxy) handleOutboundConn(src io.ReadWriter, buff []byte) []byte {
 		p.Log.Info(string(buff))
 	}
 
-	return buff
+	return buff, clientWrite
 }
 
 func (p *Proxy) handleIncomingConn(src io.ReadWriter, buff []byte) []byte {
@@ -217,7 +233,8 @@ func (p *Proxy) pipe(src, dst io.ReadWriter) {
 		}
 		b := buff[:n]
 
-		b = p.handleOutboundConn(src, b)
+		var clientWrite bool
+		b, clientWrite = p.handleOutboundConn(src, b)
 		b = p.handleIncomingConn(src, b)
 
 		//show output
@@ -225,7 +242,16 @@ func (p *Proxy) pipe(src, dst io.ReadWriter) {
 		p.Log.Trace(byteFormat, b)
 
 		//write out result
-		n, err = dst.Write(b)
+		if clientWrite {
+			if islocal {
+				n, err = src.Write(b)
+				go p.pipe(p.rconn, p.lconn)
+			} else {
+				n, err = dst.Write(b)
+			}
+		} else {
+			n, err = dst.Write(b)
+		}
 		if err != nil {
 			p.err("Write failed '%s'\n", err)
 			return

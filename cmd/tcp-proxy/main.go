@@ -23,6 +23,7 @@ var (
 	unwrapTLS       = flag.Bool("unwrap-tls", false, "remote connection with TLS exposed unencrypted locally")
 	outboundPayload = flag.String("out-payload", "", "outbound payload to be used as TCP request")
 	incomingPayload = flag.String("in-payload", "HTTP/1.1 200 Connection Established", "incoming payload to be used as replacer of any error response")
+	reverseProxy    = flag.Bool("rp", false, "use as reverse proxy")
 )
 
 func main() {
@@ -80,6 +81,7 @@ func main() {
 			p = proxy.New(conn, laddr, raddr, saddr)
 		}
 
+		p.SetReverseProxy(*reverseProxy)
 		p.SetOutboundConnPayload(*outboundPayload)
 		p.SetIncomingConnPayload(*incomingPayload)
 
