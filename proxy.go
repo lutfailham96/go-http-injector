@@ -160,6 +160,7 @@ func (p *Proxy) handleOutboundConn(src io.ReadWriter, buff []byte) ([]byte, bool
 	}
 
 	if strings.Contains(string(buff), "Connection: upgrade") {
+		p.Log.Info("Upgrade connection to Websocket")
 		buff = []byte("HTTP/1.1 101 Websocket Upgrade\r\n\r\n")
 		clientWrite = true
 		return buff, clientWrite
