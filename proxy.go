@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"crypto/tls"
 	"io"
 	"net"
@@ -24,18 +25,28 @@ type Proxy struct {
 	Nagles    bool
 	Log       Logger
 	OutputHex bool
+
+	maxFilterOutBuff uint64
+	maxFilterInBuff  uint64
+
+	payloadIncomingConn string
+	payloadOutboundConn string
 }
 
 // New - Create a new Proxy instance. Takes over local connection passed in,
 // and closes it when finished.
 func New(lconn *net.TCPConn, laddr, raddr *net.TCPAddr) *Proxy {
 	return &Proxy{
-		lconn:  lconn,
-		laddr:  laddr,
-		raddr:  raddr,
-		erred:  false,
-		errsig: make(chan bool),
-		Log:    NullLogger{},
+		lconn:               lconn,
+		laddr:               laddr,
+		raddr:               raddr,
+		erred:               false,
+		errsig:              make(chan bool),
+		Log:                 NullLogger{},
+		maxFilterOutBuff:    1024,
+		maxFilterInBuff:     1024,
+		payloadOutboundConn: "",
+		payloadIncomingConn: "",
 	}
 }
 
@@ -103,6 +114,59 @@ func (p *Proxy) err(s string, err error) {
 	p.erred = true
 }
 
+func (p *Proxy) SetOutboundConnPayload(payload string) {
+	p.payloadOutboundConn = payload
+}
+
+func (p *Proxy) SetIncomingConnPayload(payload string) {
+	p.payloadIncomingConn = payload
+}
+
+func (p *Proxy) handleOutboundConn(src io.ReadWriter, buff []byte) []byte {
+	islocal := src == p.lconn
+	if !islocal {
+		return buff
+	}
+
+	if p.payloadOutboundConn == "" {
+		return buff
+	}
+
+	if len(buff) > int(p.maxFilterOutBuff) {
+		return buff
+	}
+
+	if bytes.Contains(buff, []byte("CONNECT ")) {
+		buff = []byte(p.payloadOutboundConn)
+		p.Log.Info(string(buff))
+	}
+
+	return buff
+}
+
+func (p *Proxy) handleIncomingConn(src io.ReadWriter, buff []byte) []byte {
+	isRemote := src != p.lconn
+
+	if !isRemote {
+		return buff
+	}
+
+	if p.payloadIncomingConn == "" {
+		return buff
+	}
+
+	if len(buff) > int(p.maxFilterInBuff) {
+		return buff
+	}
+
+	if bytes.Contains(buff, []byte("HTTP/1.")) {
+		buff = []byte(p.payloadIncomingConn)
+		p.Log.Info(string(buff))
+	}
+
+	return buff
+}
+
 func (p *Proxy) pipe(src, dst io.ReadWriter) {
 	islocal := src == p.lconn
 
@@ -130,15 +194,8 @@ func (p *Proxy) pipe(src, dst io.ReadWriter) {
 		}
 		b := buff[:n]
 
-		//execute match
-		if p.Matcher != nil {
-			p.Matcher(b)
-		}
-
-		//execute replace
-		if p.Replacer != nil {
-			b = p.Replacer(b)
-		}
+		b = p.handleOutboundConn(src, b)
+		b = p.handleIncomingConn(src, b)
 
 		//show output
 		p.Log.Debug(dataDirection, n, "")
