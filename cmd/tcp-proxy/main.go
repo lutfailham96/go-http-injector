@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	proxy "github.com/jpillora/go-tcp-proxy"
+	proxy "github.com/lutfailham96/go-http-injector"
 )
 
 var (

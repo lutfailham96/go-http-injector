@@ -1,4 +1,4 @@
-module github.com/jpillora/go-tcp-proxy
+module github.com/lutfailham96/go-http-injector
 
 go 1.13
 
