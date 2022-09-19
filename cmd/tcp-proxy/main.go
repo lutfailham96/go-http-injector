@@ -14,7 +14,7 @@ var (
 
 	localAddr       = flag.String("l", ":9999", "local address")
 	remoteAddr      = flag.String("r", "localhost:80", "remote address")
-	serverAddr      = flag.String("s", "server:443", "server address")
+	serverAddr      = flag.String("s", "", "server address")
 	verbose         = flag.Bool("v", false, "display server actions")
 	veryverbose     = flag.Bool("vv", false, "display server actions and all tcp data")
 	nagles          = flag.Bool("n", false, "disable nagles algorithm")
