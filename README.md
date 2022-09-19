@@ -28,8 +28,10 @@ Usage of tcp-proxy:
   -l="localhost:9999": local address
   -n: disable nagles algorithm
   -r="localhost:80": remote address
-  -match="": match regex (in the form 'regex')
-  -replace="": replace regex (in the form 'regex~replacer')
+  -s="server address / sni address": server:443
+  -rp="use as reverse proxy"
+  -in-payload="payload to be used as incoming TCP packet"
+  -out-payload="payload to be used as outbound TCP packet"
   -v: display server actions
   -vv: display server actions and all tcp data
 ```
@@ -57,35 +59,6 @@ $ curl -H 'Host: echo.jpillora.com' localhost:9999/foo
   ...
 }
 ```
-
-### Match Example
-
-```
-$ tcp-proxy -r echo.jpillora.com:80 -match 'Host: (.+)'
-Proxying from localhost:9999 to echo.jpillora.com:80
-Matching Host: (.+)
-
-#run curl again...
-
-Connection #001 Match #1: Host: echo.jpillora.com
-```
-
-### Replace Example
-
-```
-$ tcp-proxy -r echo.jpillora.com:80 -replace '"ip": "([^"]+)"~"ip": "REDACTED"'
-Proxying from localhost:9999 to echo.jpillora.com:80
-Replacing "ip": "([^"]+)" with "ip": "REDACTED"
-```
-
-```
-#run curl again...
-{
-  "ip": "REDACTED",
-  ...
-```
-
-*Note: The `-replace` option is in the form `regex~replacer`. Where `replacer` may contain `$N` to substitute in group `N`.*
 
 ### Todo
 
