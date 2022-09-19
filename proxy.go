@@ -3,8 +3,10 @@ package proxy
 import (
 	"bytes"
 	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
+	"strings"
 )
 
 // Proxy - Manages a Proxy connection, piping data between local and remote.
@@ -13,6 +15,7 @@ type Proxy struct {
 	receivedBytes uint64
 	laddr, raddr  *net.TCPAddr
 	lconn, rconn  io.ReadWriteCloser
+	saddr         string
 	erred         bool
 	errsig        chan bool
 	tlsUnwrapp    bool
@@ -35,11 +38,12 @@ type Proxy struct {
 
 // New - Create a new Proxy instance. Takes over local connection passed in,
 // and closes it when finished.
-func New(lconn *net.TCPConn, laddr, raddr *net.TCPAddr) *Proxy {
+func New(lconn *net.TCPConn, laddr, raddr *net.TCPAddr, saddr string) *Proxy {
 	return &Proxy{
 		lconn:               lconn,
 		laddr:               laddr,
 		raddr:               raddr,
+		saddr:               saddr,
 		erred:               false,
 		errsig:              make(chan bool),
 		Log:                 NullLogger{},
@@ -53,8 +57,8 @@ func New(lconn *net.TCPConn, laddr, raddr *net.TCPAddr) *Proxy {
 // NewTLSUnwrapped - Create a new Proxy instance with a remote TLS server for
 // which we want to unwrap the TLS to be able to connect without encryption
 // locally
-func NewTLSUnwrapped(lconn *net.TCPConn, laddr, raddr *net.TCPAddr, addr string) *Proxy {
-	p := New(lconn, laddr, raddr)
+func NewTLSUnwrapped(lconn *net.TCPConn, laddr, raddr *net.TCPAddr, saddr, addr string) *Proxy {
+	p := New(lconn, laddr, raddr, saddr)
 	p.tlsUnwrapp = true
 	p.tlsAddress = addr
 	return p
@@ -122,6 +126,23 @@ func (p *Proxy) SetIncomingConnPayload(payload string) {
 	p.payloadIncomingConn = payload
 }
 
+func (p *Proxy) createOutboundConnPayload() string {
+	outPayload := strings.Replace(p.payloadOutboundConn, "[crlf]", "\r\n", -1)
+	if p.saddr == "" {
+		return outPayload
+	}
+	splitSaddr := strings.Split(p.saddr, ":")
+	host := splitSaddr[0]
+	port := splitSaddr[1]
+	outPayload = strings.Replace(outPayload, "[host]", host, -1)
+	outPayload = strings.Replace(outPayload, "[host_port]", fmt.Sprintf("%s:%s", host, port), -1)
+	return outPayload
+}
+
+func (p *Proxy) createIncomingConnPayload() string {
+	return strings.Replace(p.payloadIncomingConn, "[crlf]", "\r\n", -1)
+}
+
 func (p *Proxy) handleOutboundConn(src io.ReadWriter, buff []byte) []byte {
 	islocal := src == p.lconn
 	if !islocal {
@@ -137,7 +158,8 @@ func (p *Proxy) handleOutboundConn(src io.ReadWriter, buff []byte) []byte {
 	}
 
 	if bytes.Contains(buff, []byte("CONNECT ")) {
-		buff = []byte(p.payloadOutboundConn)
+		outPayload := p.createOutboundConnPayload()
+		buff = []byte(outPayload)
 		p.Log.Info(string(buff))
 	}
 
@@ -160,7 +182,8 @@ func (p *Proxy) handleIncomingConn(src io.ReadWriter, buff []byte) []byte {
 	}
 
 	if bytes.Contains(buff, []byte("HTTP/1.")) {
-		buff = []byte(p.payloadIncomingConn)
+		inPayload := p.createIncomingConnPayload()
+		buff = []byte(inPayload)
 		p.Log.Info(string(buff))
 	}
 

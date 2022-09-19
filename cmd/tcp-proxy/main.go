@@ -3,11 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	proxy "github.com/lutfailham96/go-http-injector"
 	"net"
 	"os"
-	"strings"
-
-	proxy "github.com/lutfailham96/go-http-injector"
 )
 
 var (
@@ -16,6 +14,7 @@ var (
 
 	localAddr       = flag.String("l", ":9999", "local address")
 	remoteAddr      = flag.String("r", "localhost:80", "remote address")
+	serverAddr      = flag.String("s", "server:443", "server address")
 	verbose         = flag.Bool("v", false, "display server actions")
 	veryverbose     = flag.Bool("vv", false, "display server actions and all tcp data")
 	nagles          = flag.Bool("n", false, "disable nagles algorithm")
@@ -46,6 +45,15 @@ func main() {
 		logger.Warn("Failed to resolve remote address: %s", err)
 		os.Exit(1)
 	}
+	var saddr string
+	if *serverAddr != "" {
+		_, err := net.ResolveTCPAddr("tcp", *serverAddr)
+		if err != nil {
+			logger.Warn("Failed to resolve remote address: %s", err)
+			os.Exit(1)
+		}
+		saddr = *serverAddr
+	}
 	listener, err := net.ListenTCP("tcp", laddr)
 	if err != nil {
 		logger.Warn("Failed to open local port to listen: %s", err)
@@ -67,16 +75,13 @@ func main() {
 		var p *proxy.Proxy
 		if *unwrapTLS {
 			logger.Info("Unwrapping TLS")
-			p = proxy.NewTLSUnwrapped(conn, laddr, raddr, *remoteAddr)
+			p = proxy.NewTLSUnwrapped(conn, laddr, raddr, saddr, *remoteAddr)
 		} else {
-			p = proxy.New(conn, laddr, raddr)
+			p = proxy.New(conn, laddr, raddr, saddr)
 		}
 
-		newOutboundPayload := createOutboundConnPayload(*outboundPayload)
-		newIncomingPayload := createIncomingConnPayload(*incomingPayload)
-
-		p.SetOutboundConnPayload(newOutboundPayload)
-		p.SetIncomingConnPayload(newIncomingPayload)
+		p.SetOutboundConnPayload(*outboundPayload)
+		p.SetIncomingConnPayload(*incomingPayload)
 
 		p.Nagles = *nagles
 		p.OutputHex = *hex
@@ -89,12 +94,4 @@ func main() {
 
 		go p.Start()
 	}
-}
-
-func createOutboundConnPayload(outboundPayload string) string {
-	return strings.Replace(outboundPayload, "[crlf]", "\r\n", -1)
-}
-
-func createIncomingConnPayload(incomingPayload string) string {
-	return strings.Replace(incomingPayload, "[crlf]", "\r\n", -1)
 }
