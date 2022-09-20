@@ -135,6 +135,14 @@ func (p *Proxy) SetReverseProxy(enabled bool) {
 	p.reverseProxy = enabled
 }
 
+func (p *Proxy) SetMaxFilterInBuff(bufferSize uint64) {
+	p.maxFilterInBuff = bufferSize
+}
+
+func (p *Proxy) SetMaxFilterOutBuff(bufferSize uint64) {
+	p.maxFilterOutBuff = bufferSize
+}
+
 func (p *Proxy) createOutboundConnPayload() string {
 	outPayload := strings.Replace(p.payloadOutboundConn, "[crlf]", "\r\n", -1)
 	if p.saddr == "" {
