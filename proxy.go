@@ -21,9 +21,6 @@ type Proxy struct {
 	tlsUnwrapp    bool
 	tlsAddress    string
 
-	Matcher  func([]byte)
-	Replacer func([]byte) []byte
-
 	// Settings
 	Nagles    bool
 	Log       Logger
