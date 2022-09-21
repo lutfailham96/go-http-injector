@@ -40,7 +40,7 @@ Usage of tcp-proxy:
 
 Use custom payload
 ```shell
-$ go-tcp-proxy \
+$ go run cmd/tcp-proxy/main.go \
     -l 127.0.0.1:9999 \
     -r 127.0.0.1:10443 \
     -s myserver:443 \
