@@ -160,28 +160,23 @@ func (p *Proxy) createIncomingConnPayload() string {
 	return strings.Replace(p.payloadIncomingConn, "[crlf]", "\r\n", -1)
 }
 
-func (p *Proxy) handleOutboundConn(src io.ReadWriter, buff []byte) ([]byte, bool) {
-	clientWrite := false
-	islocal := src == p.lconn
-	if !islocal {
-		return buff, false
-	}
+func (p *Proxy) handleOutboundConn(buff []byte) ([]byte, bool) {
+	doClientWrite := false
 
 	if p.reverseProxy {
 		if strings.Contains(strings.ToLower(string(buff)), "upgrade: websocket") {
 			p.Log.Info("Upgrade connection to Websocket")
 			buff = []byte("HTTP/1.1 101 Switching Protocols\r\n\r\n")
-			clientWrite = true
-			return buff, clientWrite
+			return buff, true
 		}
 	}
 
 	if p.payloadOutboundConn == "" {
-		return buff, clientWrite
+		return buff, doClientWrite
 	}
 
 	if len(buff) > int(p.maxFilterOutBuff) {
-		return buff, clientWrite
+		return buff, doClientWrite
 	}
 
 	if bytes.Contains(buff, []byte("CONNECT ")) {
@@ -190,16 +185,10 @@ func (p *Proxy) handleOutboundConn(src io.ReadWriter, buff []byte) ([]byte, bool
 		p.Log.Info(string(buff))
 	}
 
-	return buff, clientWrite
+	return buff, doClientWrite
 }
 
-func (p *Proxy) handleIncomingConn(src io.ReadWriter, buff []byte) []byte {
-	isRemote := src != p.lconn
-
-	if !isRemote {
-		return buff
-	}
-
+func (p *Proxy) handleIncomingConn(buff []byte) []byte {
 	if p.payloadIncomingConn == "" {
 		return buff
 	}
@@ -244,22 +233,24 @@ func (p *Proxy) pipe(src, dst io.ReadWriter) {
 		}
 		b := buff[:n]
 
-		var clientWrite bool
-		b, clientWrite = p.handleOutboundConn(src, b)
-		b = p.handleIncomingConn(src, b)
+		//modify TCP packet request
+		var doClientWrite bool
+		if islocal {
+			b, doClientWrite = p.handleOutboundConn(b)
+		} else {
+			b = p.handleIncomingConn(b)
+		}
 
 		//show output
 		p.Log.Debug(dataDirection, n, "")
 		p.Log.Trace(byteFormat, b)
 
 		//write out result
-		if clientWrite {
-			if islocal {
-				n, err = src.Write(b)
-				go p.pipe(p.rconn, p.lconn)
-			} else {
-				n, err = dst.Write(b)
-			}
+		//doClientWrite usually used on reverse proxy mode
+		//this will send response to client, then do connection switching protocol & open new connection pipe
+		if islocal && doClientWrite {
+			n, err = src.Write(b)
+			go p.pipe(p.rconn, p.lconn)
 		} else {
 			n, err = dst.Write(b)
 		}
