@@ -32,6 +32,9 @@ type Proxy struct {
 	payloadIncomingConn string
 	payloadOutboundConn string
 
+	inInitialized  bool
+	outInitialized bool
+
 	reverseProxy bool
 }
 
@@ -158,10 +161,14 @@ func (p *Proxy) createIncomingConnPayload() string {
 }
 
 func (p *Proxy) handleOutboundConn(buff []byte) ([]byte, bool) {
+	if p.outInitialized {
+		return buff, false
+	}
+
 	if p.reverseProxy {
-		if len(buff) > int(p.maxFilterOutBuff) {
-			return buff, false
-		}
+		//if len(buff) > int(p.maxFilterOutBuff) {
+		//	return buff, false
+		//}
 		if strings.Contains(strings.ToLower(string(buff)), "upgrade: websocket") {
 			p.Log.Info("Upgrade connection to Websocket")
 			buff = []byte("HTTP/1.1 101 Switching Protocols\r\n\r\n")
@@ -173,9 +180,9 @@ func (p *Proxy) handleOutboundConn(buff []byte) ([]byte, bool) {
 		return buff, false
 	}
 
-	if len(buff) > int(p.maxFilterOutBuff) {
-		return buff, false
-	}
+	//if len(buff) > int(p.maxFilterOutBuff) {
+	//	return buff, false
+	//}
 
 	if bytes.Contains(buff, []byte("CONNECT ")) {
 		outPayload := p.createOutboundConnPayload()
@@ -187,13 +194,17 @@ func (p *Proxy) handleOutboundConn(buff []byte) ([]byte, bool) {
 }
 
 func (p *Proxy) handleIncomingConn(buff []byte) []byte {
+	if p.inInitialized {
+		return buff
+	}
+
 	if p.payloadIncomingConn == "" {
 		return buff
 	}
 
-	if len(buff) > int(p.maxFilterInBuff) {
-		return buff
-	}
+	//if len(buff) > int(p.maxFilterInBuff) {
+	//	return buff
+	//}
 
 	if bytes.Contains(buff, []byte("HTTP/1.")) {
 		inPayload := p.createIncomingConnPayload()
@@ -248,7 +259,7 @@ func (p *Proxy) pipe(src, dst io.ReadWriter) {
 		//this will send response to client, then do connection switching protocol & open new connection pipe
 		if islocal && doClientWrite {
 			n, err = src.Write(b)
-			go p.pipe(p.rconn, p.lconn)
+			go p.pipe(dst, src)
 		} else {
 			n, err = dst.Write(b)
 		}
@@ -257,8 +268,10 @@ func (p *Proxy) pipe(src, dst io.ReadWriter) {
 			return
 		}
 		if islocal {
+			p.outInitialized = true
 			p.sentBytes += uint64(n)
 		} else {
+			p.inInitialized = true
 			p.receivedBytes += uint64(n)
 		}
 	}
