@@ -158,9 +158,10 @@ func (p *Proxy) createIncomingConnPayload() string {
 }
 
 func (p *Proxy) handleOutboundConn(buff []byte) ([]byte, bool) {
-	doClientWrite := false
-
 	if p.reverseProxy {
+		if len(buff) > int(p.maxFilterOutBuff) {
+			return buff, false
+		}
 		if strings.Contains(strings.ToLower(string(buff)), "upgrade: websocket") {
 			p.Log.Info("Upgrade connection to Websocket")
 			buff = []byte("HTTP/1.1 101 Switching Protocols\r\n\r\n")
@@ -169,11 +170,11 @@ func (p *Proxy) handleOutboundConn(buff []byte) ([]byte, bool) {
 	}
 
 	if p.payloadOutboundConn == "" {
-		return buff, doClientWrite
+		return buff, false
 	}
 
 	if len(buff) > int(p.maxFilterOutBuff) {
-		return buff, doClientWrite
+		return buff, false
 	}
 
 	if bytes.Contains(buff, []byte("CONNECT ")) {
@@ -182,7 +183,7 @@ func (p *Proxy) handleOutboundConn(buff []byte) ([]byte, bool) {
 		p.Log.Info(string(buff))
 	}
 
-	return buff, doClientWrite
+	return buff, false
 }
 
 func (p *Proxy) handleIncomingConn(buff []byte) []byte {
