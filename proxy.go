@@ -34,6 +34,7 @@ type Proxy struct {
 
 	inInitialized  bool
 	outInitialized bool
+	doClientWrite  bool
 
 	reverseProxy bool
 }
@@ -53,6 +54,8 @@ func New(lconn *net.TCPConn, laddr, raddr *net.TCPAddr, saddr string) *Proxy {
 		maxFilterInBuff:     1024,
 		payloadOutboundConn: "",
 		payloadIncomingConn: "",
+		inInitialized:       false,
+		outInitialized:      false,
 		reverseProxy:        false,
 	}
 }
@@ -234,6 +237,7 @@ func (p *Proxy) pipe(src, dst io.ReadWriter) {
 
 	//directional copy (64k buffer)
 	buff := make([]byte, 0xffff)
+	doClientWrite := false
 	for {
 		n, err := src.Read(buff)
 		if err != nil {
@@ -243,7 +247,6 @@ func (p *Proxy) pipe(src, dst io.ReadWriter) {
 		b := buff[:n]
 
 		//modify TCP packet request
-		var doClientWrite bool
 		if islocal {
 			b, doClientWrite = p.handleOutboundConn(b)
 		} else {
