@@ -1,4 +1,6 @@
 # tcp-proxy
+[![go-tcp-proxy CI](https://github.com/lutfailham96/go-http-injector/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/lutfailham96/go-http-injector/actions/workflows/ci.yml)
+[![Maintainability](https://api.codeclimate.com/v1/badges/b458531c1805fb033210/maintainability)](https://codeclimate.com/github/lutfailham96/go-http-injector/maintainability)
 
 A small TCP proxy written in Go
 
@@ -6,16 +8,10 @@ This project was intended for debugging text-based protocols. The next version w
 
 ## Install
 
-**Binaries**
-
-Download [the latest release](https://github.com/jpillora/go-tcp-proxy/releases/latest), or
-
-Install latest release now with `curl https://i.jpillora.com/go-tcp-proxy! | bash`
-
 **Source**
 
 ``` sh
-$ go get -v github.com/jpillora/go-tcp-proxy/cmd/tcp-proxy
+$ go get -v github.com/lutfailham96/go-http-injector/cmd/tcp-proxy
 ```
 
 ## Usage
@@ -40,24 +36,33 @@ Usage of tcp-proxy:
 **only works on text strings**
 *and does NOT work across packet boundaries*
 
-### Simple Example
+### Client Example
 
-Since HTTP runs over TCP, we can also use `tcp-proxy` as a primitive HTTP proxy:
+Use custom payload
+```shell
+$ go-tcp-proxy \
+    -l 127.0.0.1:9999 \
+    -r 127.0.0.1:10443 \
+    -s myserver:443 \
+    -out-payload="GET ws://cloudflare.com HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf]Connection: keep-alive[crlf][crlf]"
+
+Proxying from 127.0.0.1:9999 to 104.15.50.1:443
+```
+
+stunnel configuration
+```
+[ws]
+client = yes
+accept = 127.0.0.1:10443
+connect = 104.15.50.5:443
+sni = cloudflare.com
+cert = /etc/stunnel/ssl/stunnel.pem
 
 ```
-$ tcp-proxy -r echo.jpillora.com:80
-Proxying from localhost:9999 to echo.jpillora.com:80
-```
 
-Then test with `curl`:
-
-```
-$ curl -H 'Host: echo.jpillora.com' localhost:9999/foo
-{
-  "method": "GET",
-  "url": "/foo"
-  ...
-}
+Tunnel over SSH conneciton
+```shell
+$ ssh -o "ProxyCommand=corkscrew 127.0.0.1 9999 %h %p" -v4ND 1080 my-user@localhost
 ```
 
 ### Todo
